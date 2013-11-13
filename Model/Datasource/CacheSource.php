@@ -115,26 +115,35 @@ class CacheSource extends DataSource {
  * @param Model $Model The model to clear the cache for
  */
 	public function clearModelCache(Model $Model, $query = null) {
+		$modelName = $Model->alias;
 		$map = Cache::read('map', $this->config['config']);
-
+		if ($map === false) {
+			$map = array();
+		}
 		$keys = array();
 		if ($query !== null) {
 			$keys = array($this->_key($Model, $query));
 		} else{
-			if (!empty($map[$this->source->configKeyName]) && !empty($map[$this->source->configKeyName][$Model->alias])) {
-				$keys = $map[$this->source->configKeyName][$Model->alias];
+			if(isset($map[$modelName])){
+				$keys = $map[$modelName];
 			}
 		}
 		if (empty($keys)) {
 			return;
 		}
-		$map[$this->source->configKeyName][$Model->alias] = array_flip($map[$this->source->configKeyName][$Model->alias]);
-		foreach ($keys as $cacheKey) {
-			Cache::delete($cacheKey, $this->config['config']);
-			unset($map[$this->source->configKeyName][$Model->alias][$cacheKey]);
+		if ($query !== null) {
+			unset($map[$modelName]);
+			Cache::write('map', $map, $this->config['config']);
+			foreach ($keys as $cacheKey) {
+				Cache::delete($cacheKey, $this->config['config']);
+			}
+		}else{
+			foreach ($keys as $cacheKey) {
+				Cache::delete($cacheKey, $this->config['config']);
+				unset($map[$modelName][$cacheKey]);
+			}
+			Cache::write('map', $map, $this->config['config']);
 		}
-		$map[$this->source->configKeyName][$Model->alias] = array_values(array_flip($map[$this->source->configKeyName][$Model->alias]));
-		Cache::write('map', $map, $this->config['config']);
 	}
 
 /**
@@ -165,18 +174,18 @@ class CacheSource extends DataSource {
  * @param string $key
  */
 	protected function _map(Model $Model, $key) {
+		$modelName = $Model->alias;
 		$map = Cache::read('map', $this->config['config']);
 		if ($map === false) {
 			$map = array();
 		}
-		$map = Set::merge($map, array(
-			$this->source->configKeyName => array(
-				$Model->alias => array(
-					$key
-				)
-			)
-		));
-		Cache::write('map', $map, $this->config['config']);
+		if(!isset($map[$modelName])){
+			$map[$modelName] = array();
+		}
+		if(!isset($map[$modelName][$key])){
+			$map[$modelName][$key] = $key;
+			Cache::write('map', $map, $this->config['config']);
+		}
 	}
 
 /**
